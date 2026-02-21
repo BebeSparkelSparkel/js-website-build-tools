@@ -128,7 +128,7 @@ async function main() {
 
   program
     .option('--substitutions <file>', 'pre-merged JSON substitution object')
-    .option('--output <file>', 'output HTML file path (defaults to stdout)')
+    .option('--output <file>', 'output file path (defaults to stdout)')
     .option('--input <file>', 'input template file (defaults to stdin)')
     .option('--stdin-key <key>', 'when set, read stdin and place its content into context under this key (template must then come from --input)')
     .option('--stdout', 'output to stdout instead of file')
