@@ -96,30 +96,6 @@ async function readFileOrStdin(filePath) {
   }
 }
 
-function loadPageOrdering(filePath) {
-  const content = fs.readFileSync(filePath, 'utf8');
-  const ordering = yaml.load(content);
-  
-  if (!Array.isArray(ordering)) {
-    throw new Error('Page ordering file must contain a YAML array of filenames');
-  }
-  
-  return ordering;
-}
-
-function getNextPage(outputFile, pageOrdering, pathPrefix) {
-  const outputBasename = path.basename(outputFile);
-  const currentIndex = pageOrdering.indexOf(outputBasename);
-  
-  if (currentIndex === -1) {
-    throw new Error(`Output file basename "${outputBasename}" not found in page ordering`);
-  }
-  
-  return currentIndex === pageOrdering.length - 1 
-    ? null 
-    : pathPrefix + pageOrdering[currentIndex + 1];
-}
-
 function addDefaultDisplay(data) {
   const processed = {};
   
@@ -154,6 +130,7 @@ async function main() {
     .option('--substitutions <file>', 'pre-merged JSON substitution object')
     .option('--output <file>', 'output HTML file path (defaults to stdout)')
     .option('--input <file>', 'input template file (defaults to stdin)')
+    .option('--stdin-key <key>', 'when set, read stdin and place its content into context under this key (template must then come from --input)')
     .option('--stdout', 'output to stdout instead of file')
     .option('--development', 'make validation warnings instead of errors', false)
     .option('--start-delimiter <delimiter>', 'custom start delimiter (default: {{)', '{{')
@@ -188,17 +165,14 @@ async function main() {
         throw new Error(`JSON argument ${index + 1} must be an object, got ${Array.isArray(additionalData) ? 'array' : typeof additionalData}`);
       Object.assign(context, additionalData);
     });
-    
-    // Load page ordering if provided
-    let pageOrdering = null;
-    if (config.pageOrdering) {
-      console.error('Loading page ordering:', config.pageOrdering);
-      const content = await fs.promises.readFile(config.pageOrdering, 'utf8');
-      pageOrdering = yaml.load(content);
-      
-      if (!Array.isArray(pageOrdering)) {
-        throw new Error('Page ordering file must contain a YAML array of filenames');
+
+    // Read stdin content if --stdin-key is used (before reading template)
+    if (config.stdinKey) {
+      if (!config.input) {
+        console.error('Error: --stdin-key requires --input to specify the template file');
+        process.exit(1);
       }
+      context[config.stdinKey] = await readFileOrStdin();
     }
 
     // Read template
