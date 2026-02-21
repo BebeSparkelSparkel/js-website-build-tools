@@ -9,7 +9,7 @@ const cliNamePattern = "([a-zA-Z_][a-zA-Z0-9_]*)";
 const templateVariableNameRegex = new RegExp("\\$" + cliNamePattern, "g");
 const cliPathAssignmentRegex = new RegExp("^" + cliNamePattern + "=(.+)$")
 
-const help = `Usage: file-injector.js [options] [path-variables...] [input-file]
+const help = `Usage: mustache_file.js [options] [path-variables...] [input-file]
 
 Options:
   --root <path>    Root path to prepend to file paths (default: current directory)
@@ -32,10 +32,10 @@ Description:
   Double braces {{file:...}} will cause an error (or warning in development mode).
 
 Examples:
-  cat template.html | file-injector.js > output.html
-  file-injector.js template.html > output.html
-  file-injector.js templates=../templates build=./dist template.html > output.html
-  file-injector.js --root ./assets components=./src template.html > output.html
+  cat template.html | mustache_file.js > output.html
+  mustache_file.js template.html > output.html
+  mustache_file.js templates=../templates build=./dist template.html > output.html
+  mustache_file.js --root ./assets components=./src template.html > output.html
 
 Template syntax:
   {{{file:$templates/header.html}}}    - Uses templates path variable + relative path
