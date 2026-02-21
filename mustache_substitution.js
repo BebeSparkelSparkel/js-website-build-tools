@@ -135,12 +135,12 @@ async function main() {
     .option('--development', 'make validation warnings instead of errors', false)
     .option('--start-delimiter <delimiter>', 'custom start delimiter (default: {{)', '{{')
     .option('--end-delimiter <delimiter>', 'custom end delimiter (default: }})', '}}')
-    .allowUnknownOption() // Allow additional JSON arguments
-    .argument('[json...]', 'Additional JSON context objects')
+    .allowUnknownOption()
+    .argument('[extra-context...]', 'Additional assignments `name=value` or JSON context objects')
     .parse();
 
   const config = program.opts();
-  const additionalJsonArgs = program.args; // Get remaining arguments as JSON strings
+  const additionalArgs = program.args;
 
   try {
     let context = {};
@@ -153,12 +153,18 @@ async function main() {
     }
     
     // Process additional JSON arguments
-    additionalJsonArgs.forEach((jsonArg, index) => {
+    additionalJsonArgs.forEach((argStr, index) => {
       let additionalData;
       try {
-        additionalData = JSON.parse(jsonArg);
+        additionalData = JSON.parse(argStr);
       } catch (parseError) {
-        console.error(`Error parsing JSON argument ${index + 1}: ${jsonArg}`);
+        const assignmentRegex = /^([-a-zA-Z0-9_])+=(.+)$/;
+        const assignmentMatch = assignmentRegex.exec(argStr);
+        if (assignmentMatch) {
+          context[assignmentMatch[1]] = assignmentMatch[2];
+          return;
+        }
+        console.error(`Error parsing JSON argument ${index + 1}: ${argStr}`);
         throw new Error(`Invalid JSON in argument ${index + 1}: ${parseError.message}`);
       }
       if (typeof additionalData !== 'object' || additionalData === null || Array.isArray(additionalData))
