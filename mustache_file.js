@@ -9,12 +9,16 @@ const cliNamePattern = "([a-zA-Z_][a-zA-Z0-9_]*)";
 const templateVariableNameRegex = new RegExp("\\$" + cliNamePattern, "g");
 const cliPathAssignmentRegex = new RegExp("^" + cliNamePattern + "=(.+)$")
 
-const help = `Usage: mustache_file.js [options] [path-variables...] [input-file]
+const help =
+`Usage:
+      mustache_file.js [options]                 [path-variables...] [input-file]
+      mustache_file.js --stdin-path virtual/path [path-variables...] input-file
 
 Options:
-  --root <path>    Root path to prepend to file paths (default: current directory)
-  --development    Show warnings instead of errors for double braces
-  -h, --help       Show this help message
+  --root <path>          Root path to prepend to file paths (default: current directory)
+  --stdin-path <path>    Map stdin to a virtual file path. Requires an input-file argument
+  --development          Show warnings instead of errors for double braces
+  -h, --help             Show this help message
 
 Arguments:
   path-variables   Path variable definitions in format <name>=<path>
@@ -41,7 +45,8 @@ Template syntax:
   {{{file:$templates/header.html}}}    - Uses templates path variable + relative path
   {{{file:$exact_file}}}               - Uses exact_file path variable as complete path
   {{{file:relative/path.css}}}         - Regular relative path
-  {{{file:/absolute/path.js}}}         - Absolute path (ignores root)`;
+  {{{file:/absolute/path.js}}}         - Absolute path (ignores root)
+`;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -54,6 +59,7 @@ function parseArgs() {
 
   const config = {
     rootPath: '.',
+    stdinPath: null,
     production: true,
     inputFile: null,
     pathVariables: {}
@@ -63,14 +69,24 @@ function parseArgs() {
     console.error(help + '\n\nError: ' + msg);
     process.exit(1);
   }
+  function getOptionValue() {
+    if (i + 1 >= args.length)
+      error(`${args[i]} option requires a value`);
+    const value = args[++i].trim();
+    if (value.length <= 0)
+      error(`${args[i - 1]} has a zero length value`);
+    return value;
+  }
   // options
   for (; i < args.length && args[i].startsWith('--'); i++) {
     switch (args[i]) {
       case '--root':
-        if (i + 1 >= args.length) {
-          error('--root option requires a value');
-        }
-        config.rootPath = args[++i];
+        config.rootPath = getOptionValue();
+        if (!fs.existsSync(config.rootPath))
+          error(`Root path does not exist: ${config.rootPath}`);
+        break;
+      case '--stdin-path':
+        config.stdinPath = getOptionValue();
         break;
       case '--development':
         config.production = false;
@@ -85,22 +101,33 @@ function parseArgs() {
   for (; i < args.length && (match = args[i].match(cliPathAssignmentRegex)); i++) {
       // Path variable definition
       const [, name, path] = match;
-      config.pathVariables[name] = path;
+      config.pathVariables[name] = path.trim();
   }
   // input file
-  if (i < args.length - 1)
-    error(`Unknown argument: ${args[i]}`);
-  if (i === args.length - 1)
+  if (i >= args.length) {
+    if (config.stdinPath)
+      error('input-file must be given if --stdin-path is set');
+  }
+  else {
     switch (args[i]) {
       case '-':
+        if (config.stdinPath)
+          error('input-file cannot be set to stdin with - while --stdin-path is also set');
         break;
       case '':
         error('Empty string input file path');
         break;
       default:
-        config.inputFile = args[i++];
+        config.inputFile = args[i];
         break;
     }
+    i++;
+  }
+
+  // extranious arguments
+  if (i < args.length)
+    error('Unknown arguments: ' + args.slice(i).join(' '));
+
   return config;
 }
 
@@ -119,16 +146,20 @@ function checkForDoubleFileBraces(template, development) {
 }
 
 let exitOnError = true;
-function preprocessTemplate(template, rootPath, pathVariables) {
+function preprocessTemplate(template, rootPath, pathVariables, stdinPath, stdinData) {
   function error(...messages) {
     console.error(messages.join("\n"));
     if (exitOnError)
       process.exit(1);
   }
-  return template.replace(fileReplaceRegex, (match, filePath) => {
+  let stdinPathNotFound = true;
+  const result = template.replace(fileReplaceRegex, (match, filePath) => {
     filePath = filePath.trim();
     let unfinished = true;
+    let i = 0;
     while (unfinished) {
+      if (i++ >= 100)
+        error('Exceeded maximum path resolution iterations');
       unfinished = false;
       filePath = filePath.replace(templateVariableNameRegex, (_, variable) => {
         unfinished = true;
@@ -140,8 +171,12 @@ function preprocessTemplate(template, rootPath, pathVariables) {
         return pathVariables[variable];
       });
     }
-    if (filePath.length == 0)
+    if (filePath.length === 0)
       error(`Error: Empty path result from ${match}`);
+    if (filePath === stdinPath) {
+      stdinPathNotFound = false;
+      return stdinData;
+    }
     if (!path.isAbsolute(filePath))
       filePath = path.join(rootPath, filePath);
     try {
@@ -151,22 +186,31 @@ function preprocessTemplate(template, rootPath, pathVariables) {
     }
     return match;
   });
+  if (stdinPath && stdinPathNotFound)
+    error(`--stdin-path ${stdinPath} specified but not utilized by the template`);
+  return result;
 }
 
 async function readInput(inputFile) {
+  let data = '';
   if (inputFile) {
     // Read from file
     try {
-      return await fs.promises.readFile(inputFile, 'utf8');
+      data = await fs.promises.readFile(inputFile, 'utf8');
     } catch (e) {
       console.error(`Error reading input file ${inputFile}:`, e.message);
       process.exit(1);
     }
   }
-  // Read from stdin
-  let data = '';
-  for await (const chunk of process.stdin) {
-    data += chunk;
+  else {
+    // Read from stdin
+    for await (const chunk of process.stdin) {
+      data += chunk;
+    }
+  }
+  if (data.length <= 0) {
+    console.error(`No data read from ${inputFile ? inputFile : "stdin"}`);
+    process.exit(1);
   }
   return data;
 }
@@ -190,8 +234,13 @@ async function main() {
     console.error("Error: No template data");
     process.exit(1);
   }
-  
-  const output = preprocessTemplate(inputText, config.rootPath, config.pathVariables);
+  const stdinData = config.stdinPath ? await readInput() : null;
+  if (config.stdinPath && stdinData.length === 0) {
+    console.error('Error: No data from stdin');
+    process.exit(1);
+  }
+
+  const output = preprocessTemplate(inputText, config.rootPath, config.pathVariables, config.stdinPath, stdinData);
   checkForDoubleFileBraces(output, !config.production);
   writeOutput(output);
 }
