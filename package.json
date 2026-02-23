@@ -1,0 +1,16 @@
+{
+  "name": "js-website-build-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "subst-merge": "./substitutions_merge.js",
+    "macro-file": "./mustache_file.js",
+    "macro-subst": "./mustache_substitution.js"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "js-yaml": "^4.1.0",
+    "mustache": "^4.2.0"
+  }
+}
