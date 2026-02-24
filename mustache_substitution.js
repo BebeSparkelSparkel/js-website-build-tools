@@ -148,7 +148,11 @@ async function main() {
     // Load pre-merged substitution data if provided
     if (config.substitutions) {
       console.error('Loading substitutions:', config.substitutions);
-      const substitutionData = JSON.parse(await fs.promises.readFile(config.substitutions, 'utf8'));
+      try {
+        const substitutionData = JSON.parse(await fs.promises.readFile(config.substitutions, 'utf8'));
+      } catch (error) {
+        throw new Error(('Error parsing json substitutions from file:', config.substitutions, error.message);
+      }
       context = addDefaultDisplay(substitutionData);
     }
     
