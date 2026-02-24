@@ -2,7 +2,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import yaml from 'js-yaml';
 import { program } from 'commander';
 import Mustache from 'mustache';
 
@@ -150,19 +149,19 @@ async function main() {
       console.error('Loading substitutions:', config.substitutions);
       try {
         const substitutionData = JSON.parse(await fs.promises.readFile(config.substitutions, 'utf8'));
+        context = addDefaultDisplay(substitutionData);
       } catch (error) {
-        throw new Error(('Error parsing json substitutions from file:', config.substitutions, error.message);
+        throw new Error(`Error parsing json substitutions from file ${config.substitutions} because ${error.message}`);
       }
-      context = addDefaultDisplay(substitutionData);
     }
     
     // Process additional JSON arguments
-    additionalJsonArgs.forEach((argStr, index) => {
+    additionalArgs.forEach((argStr, index) => {
       let additionalData;
       try {
         additionalData = JSON.parse(argStr);
       } catch (parseError) {
-        const assignmentRegex = /^([-a-zA-Z0-9_])+=(.+)$/;
+        const assignmentRegex = /^([-a-zA-Z0-9_]+)=(.+)$/;
         const assignmentMatch = assignmentRegex.exec(argStr);
         if (assignmentMatch) {
           context[assignmentMatch[1]] = assignmentMatch[2];
