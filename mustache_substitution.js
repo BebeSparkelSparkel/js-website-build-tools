@@ -134,6 +134,11 @@ async function main() {
     .option('--development', 'make validation warnings instead of errors', false)
     .option('--start-delimiter <delimiter>', 'custom start delimiter (default: {{)', '{{')
     .option('--end-delimiter <delimiter>', 'custom end delimiter (default: }})', '}}')
+    .option('--passes <number>', 'number of substitution passes on the vales (not document)', str => {
+        const n = parseInt(str, 10);
+        if (isNaN(n) || n < 0) throw new Error(`Invalid value '${n}'. Must be a non-negative integer.`);
+        return n;
+      }, 0)
     .allowUnknownOption()
     .argument('[extra-context...]', 'Additional assignments `name=value` or JSON context objects')
     .parse();
@@ -184,6 +189,59 @@ async function main() {
       context[config.stdinKey] = await readFileOrStdin();
     }
 
+    // Create renderer with custom delimiters and render template
+    const renderer = new TemplateRenderer(
+      config.startDelimiter,
+      config.endDelimiter,
+      config.development
+    );
+
+    // Perform macro substitution on the replacement strings
+    if (config.passes > 0) {
+      const pending = new Map();
+      for (const key of Object.keys(context)) {
+        const val = context[key];
+        const enriched = val !== null && typeof val === 'object'
+          && typeof val.toString === 'function'
+          && val.toString !== Object.prototype.toString;
+        if (!enriched && typeof val !== 'string') continue;
+        pending.set(key, { enriched, current: enriched ? val.toString() : val });
+      }
+      for (let pass = 0; pass < config.passes && pending.size > 0; pass++) {
+        let changed = false;
+        for (const [key, entry] of [...pending]) {
+          const expanded = renderer.render(entry.current, context);
+          if (expanded !== entry.current) {
+            changed = true;
+            entry.current = expanded;
+            if (entry.enriched) {
+              const val = context[key];
+              val.toString = () => expanded;
+              val.valueOf = () => expanded;
+            } else {
+              context[key] = expanded;
+            }
+          } else {
+            pending.delete(key);
+          }
+        }
+        if (!changed) {
+          console.error(`Value substitution converged after ${pass + 1} pass(es)`);
+          break;
+        }
+      }
+      if (pending.size > 0) {
+        const keys = [...pending.keys()].join(', ');
+        const message = `${pending.size} value(s) still unresolved after ${config.passes} pass(es): ${keys}`;
+        if (config.development) {
+          console.warn(`Warning: ${message}`);
+        } else {
+          console.error(`Error: ${message}`);
+          process.exit(1);
+        }
+      }
+    }
+
     // Read template
     const inputText = await readFileOrStdin(config.input);
     if (inputText.length === 0) {
@@ -191,13 +249,6 @@ async function main() {
       process.exit(1);
     }
 
-    // Create renderer with custom delimiters and render template
-    const renderer = new TemplateRenderer(
-      config.startDelimiter,
-      config.endDelimiter,
-      config.development
-    );
-    
     console.error('Rendering template...');
     const output = renderer.render(inputText, context);
 
