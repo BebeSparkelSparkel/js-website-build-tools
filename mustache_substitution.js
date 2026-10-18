@@ -159,24 +159,25 @@ async function main() {
         throw new Error(`Error parsing json substitutions from file ${config.substitutions} because ${error.message}`);
       }
     }
-    
-    // Process additional JSON arguments
+
+    // Process additional arguments (name=value assignments or JSON objects)
     additionalArgs.forEach((argStr, index) => {
+      const where = `CLI positional argument ${index + 1} ('${argStr}')`;
       let additionalData;
       try {
         additionalData = JSON.parse(argStr);
       } catch (parseError) {
-        const assignmentRegex = /^([-a-zA-Z0-9_]+)=(.+)$/;
-        const assignmentMatch = assignmentRegex.exec(argStr);
+        const assignmentMatch = /^([-a-zA-Z0-9_]+)=(.+)$/.exec(argStr);
         if (assignmentMatch) {
           context[assignmentMatch[1]] = assignmentMatch[2];
           return;
         }
-        console.error(`Error parsing JSON argument ${index + 1}: ${argStr}`);
-        throw new Error(`Invalid JSON in argument ${index + 1}: ${parseError.message}`);
+        throw new Error(`${where} is neither name=value nor valid JSON: ${parseError.message}`);
       }
-      if (typeof additionalData !== 'object' || additionalData === null || Array.isArray(additionalData))
-        throw new Error(`JSON argument ${index + 1} must be an object, got ${Array.isArray(additionalData) ? 'array' : typeof additionalData}`);
+      if (typeof additionalData !== 'object' || additionalData === null || Array.isArray(additionalData)) {
+        const kind = additionalData === null ? 'null' : Array.isArray(additionalData) ? 'array' : typeof additionalData;
+        throw new Error(`${where} must be name=value or a JSON object, but it parsed as ${kind}`);
+      }
       Object.assign(context, additionalData);
     });
 
