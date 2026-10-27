@@ -6,7 +6,10 @@
   "bin": {
     "subst-merge": "./substitutions_merge.js",
     "macro-file": "./mustache_file.js",
-    "macro-subst": "./mustache_substitution.js"
+    "macro-subst": "./mustache_substitution.js",
+    "list-pages": "./list_pages.js",
+    "next-page": "./next_page_resolver.js",
+    "ensure-subst": "./ensure_substitutions.js"
   },
   "dependencies": {
     "commander": "^14.0.0",
